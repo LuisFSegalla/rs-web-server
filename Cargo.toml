@@ -1,0 +1,10 @@
+[package]
+name = "web-app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-web = "4"
+rand = "0.10.2"
+tera = "2"
+zeromq = "0.6.0"
