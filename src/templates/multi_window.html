@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 32px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .windows-container {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .window {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .window:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .window-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .window-content {
+            padding: 20px;
+            position: relative;
+            height: 300px;
+        }
+
+        canvas {
+            max-height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>{{ name }}</h1>
+        <div class="windows-container" id="windowsContainer"></div>
+    </div>
+
+    <script>
+        const allPoints = [
+            {% for p in points %}
+                {{ p }}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        // Configuration
+        const Y = {{ windows }};  // Number of windows
+        const Z = {{ values_per_window }};  // Values per window
+
+        console.log('Total points:', allPoints.length, 'Y:', Y, 'Z:', Z);
+
+        const container = document.getElementById('windowsContainer');
+        let currentIndex = 0;
+
+        // Create Y windows
+        for (let i = 0; i < Y; i++) {
+            // Extract Z values for this window
+            const windowData = allPoints.slice(currentIndex, currentIndex + Z);
+
+            // Create window element
+            const window = document.createElement('div');
+            window.className = 'window';
+
+            const header = document.createElement('div');
+            header.className = 'window-header';
+            header.textContent = `Window ${i + 1}`;
+
+            const content = document.createElement('div');
+            content.className = 'window-content';
+
+            const canvas = document.createElement('canvas');
+            canvas.id = `chart-${i}`;
+
+            content.appendChild(canvas);
+            window.appendChild(header);
+            window.appendChild(content);
+            container.appendChild(window);
+
+            // Create chart for this window
+            const labels = windowData.map((_, idx) => idx);
+
+            new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `Window ${i + 1}`,
+                        data: windowData,
+                        borderColor: `hsl(${i * (360 / Y)}, 70%, 50%)`,
+                        backgroundColor: `hsla(${i * (360 / Y)}, 70%, 50%, 0.1)`,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 4,
+                        pointBackgroundColor: `hsl(${i * (360 / Y)}, 70%, 50%)`,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+
+            currentIndex += Z;
+        }
+    </script>
+</body>
+</html>
