@@ -29,22 +29,47 @@ pub struct UserData {
 pub async fn server(url: String, data: &web::Data<UserDataProtected>) {
     log::info!("Trying to connecto to {url}");
     let mut socket: zeromq::SubSocket = zeromq::SubSocket::new();
-    socket.connect(&url).await.expect("Failed to connect");
-    socket.subscribe("").await.expect("Could not subscribe.");
+    match socket.connect(&url).await {
+        Ok(_) => log::info!("Connected to {url}"),
+        Err(e) => {
+            log::error!("Failed to connect to {url}: {e}");
+            return;
+        }
+    }
+    match  socket.subscribe("").await {
+        Ok(_) => log::info!("Subscribed to all messages"),
+        Err(e) => {
+            log::error!("Failed to subscribe: {e}");
+            return;
+        }
+    }
     log::info!("Connection stabilished with {url}");
         
     loop {
         match socket.recv().await {
             Ok(msg) => {
-                let repl: String = msg.try_into().expect("Could not convert to string");
-                println!("Received ZMQ: {:?}", repl);
-                let json: UserData = serde_json::from_str(&repl).expect("err");
-                let mut _data = data.data_struct.lock().unwrap();
-                _data.id = json.id;
-                _data.name = json.name;
-                _data.data = json.data;
-                _data.shape = json.shape;
-                println!("data {:?}",_data);
+                match msg.try_into() {
+                    Ok(repl) => {
+                        let repl: String = repl;
+                        match serde_json::from_str::<UserData>(&repl) {
+                            Ok(json) => {
+                                match data.data_struct.lock() {
+                                    Ok(mut _data) => {
+                                        _data.id = json.id;
+                                        _data.name = json.name;
+                                        _data.data = json.data;
+                                        _data.shape = json.shape;
+                                        log::info!("data {:?}",_data.id);
+                                    }
+                                    Err(e) => log::error!("Failed to lock data: {e}"),
+                                }
+                            }
+                            Err(e) => log::error!("Could not Deserialize reply: {e}"),
+                            
+                        }
+                    }
+                    Err(e) => log::error!("Could not convert msg: {e}"),
+                }
 
             }
             Err(e) => {
@@ -52,14 +77,6 @@ pub async fn server(url: String, data: &web::Data<UserDataProtected>) {
                 break;
             }
         }
-        // let repl: String = socket.recv().await?.try_into()?;
-        // let json: UserData = serde_json::from_str(&repl)?;
-        // let mut _data = data.data_struct.lock().unwrap();
-        // _data.id = json.id;
-        // _data.name = json.name;
-        // _data.data = json.data;
-        // _data.shape = json.shape;
-        // println!("data {:?}",_data);
     }
         // });
 }
