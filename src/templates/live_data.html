@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live MCA Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 32px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .status {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .status.connected {
+            color: #4ade80;
+            border-left: 4px solid #4ade80;
+        }
+
+        .status.disconnected {
+            color: #f87171;
+            border-left: 4px solid #f87171;
+        }
+
+        .info-bar {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .info-item {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #4ade80;
+        }
+
+        .info-item label {
+            font-size: 12px;
+            opacity: 0.8;
+            display: block;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-item .value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .windows-container {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .window {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .window:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .window-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .window-content {
+            padding: 20px;
+            position: relative;
+            height: 300px;
+        }
+
+        canvas {
+            max-height: 100%;
+        }
+
+        .update-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #4ade80;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            animation: pulse 1s ease-in-out;
+            box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        @media (max-width: 1600px) {
+            .windows-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .windows-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .windows-container {
+                grid-template-columns: repeat(1, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 id="dataName">MCA Live Data</h1>
+        <div class="status disconnected" id="status">
+            <span id="statusText">● Connecting...</span>
+        </div>
+
+        <div class="info-bar">
+            <div class="info-item">
+                <label>ID</label>
+                <div class="value" id="dataId">-</div>
+            </div>
+            <div class="info-item">
+                <label>Data Points</label>
+                <div class="value" id="dataCount">0</div>
+            </div>
+            <div class="info-item">
+                <label>Shape</label>
+                <div class="value" id="dataShape">-</div>
+            </div>
+            <div class="info-item">
+                <label>Last Update</label>
+                <div class="value" id="lastUpdate">-</div>
+            </div>
+        </div>
+
+        <div class="windows-container" id="windowsContainer"></div>
+    </div>
+
+    <script>
+        const WINDOWS_PER_ROW = 4;
+        let charts = [];
+        let currentShape = null;
+
+        // // Connect to WebSocket
+        // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // const host = window.location.host;
+        // const ws = new WebSocket(`${protocol}//${host}/ws`);
+        const ws = new WebSocket(`ws://127.0.0.1:8080/ws`);
+
+        ws.onopen = () => {
+            updateStatus(true);
+            console.log('✓ WebSocket connected');
+        };
+
+        ws.onclose = () => {
+            updateStatus(false);
+            console.log('✗ WebSocket disconnected');
+            // Attempt reconnect after 3 seconds
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        };
+
+        ws.onerror = (error) => {
+            console.error('✗ WebSocket error:', error);
+            updateStatus(false);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Received data:', data);
+                
+                // Update info bar
+                document.getElementById('dataId').textContent = data.id;
+                document.getElementById('dataName').textContent = data.name;
+                document.getElementById('dataCount').textContent = data.data.length;
+                document.getElementById('dataShape').textContent = `${data.shape[0]} × ${data.shape[1]}`;
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                
+                // Initialize charts if shape changed
+                if (!currentShape || currentShape[0] !== data.shape[0] || currentShape[1] !== data.shape[1]) {
+                    currentShape = data.shape;
+                    initializeCharts(data.data, data.shape);
+                } else {
+                    // Update existing charts
+                    updateCharts(data.data, data.shape);
+                }
+                
+                // Show update indicator
+                showUpdateIndicator();
+            } catch (e) {
+                console.error('✗ Error parsing WebSocket message:', e);
+            }
+        };
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+            
+            if (connected) {
+                statusEl.classList.add('connected');
+                statusEl.classList.remove('disconnected');
+                statusText.textContent = '● Connected';
+            } else {
+                statusEl.classList.remove('connected');
+                statusEl.classList.add('disconnected');
+                statusText.textContent = '● Disconnected - Reconnecting...';
+            }
+        }
+
+        function initializeCharts(dataArray, shape) {
+            const container = document.getElementById('windowsContainer');
+            container.innerHTML = '';
+            charts = [];
+
+            const windows = shape[0];  // Number of windows
+            const valuesPerWindow = shape[1];  // Values per window
+
+            console.log(`Initializing ${windows} windows with ${valuesPerWindow} values each`);
+
+            // Set grid to max 4 per row
+            const colsPerRow = Math.min(WINDOWS_PER_ROW, windows);
+            container.style.gridTemplateColumns = `repeat(${colsPerRow}, 1fr)`;
+
+            let currentIndex = 0;
+
+            for (let i = 0; i < windows; i++) {
+                const windowData = dataArray.slice(currentIndex, currentIndex + valuesPerWindow);
+
+                // Create window element
+                const window = document.createElement('div');
+                window.className = 'window';
+
+                const header = document.createElement('div');
+                header.className = 'window-header';
+                header.textContent = `Window ${i + 1}`;
+
+                const content = document.createElement('div');
+                content.className = 'window-content';
+
+                const canvas = document.createElement('canvas');
+                canvas.id = `chart-${i}`;
+
+                content.appendChild(canvas);
+                window.appendChild(header);
+                window.appendChild(content);
+                container.appendChild(window);
+
+                // Create chart
+                const ctx = canvas.getContext('2d');
+                const labels = windowData.map((_, idx) => idx);
+                const hue = (i * (360 / windows)) % 360;
+
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: `Window ${i + 1}`,
+                            data: windowData,
+                            borderColor: `hsl(${hue}, 70%, 50%)`,
+                            backgroundColor: `hsla(${hue}, 70%, 50%, 0.1)`,
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 4,
+                            pointBackgroundColor: `hsl(${hue}, 70%, 50%)`,
+                            pointHoverRadius: 6,
+                            pointBorderWidth: 0,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: {
+                            duration: 300  // Smooth animation on update
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 15,
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)',
+                                    drawBorder: false,
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 11,
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false,
+                                    drawBorder: false,
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 11,
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                charts.push(chart);
+                currentIndex += valuesPerWindow;
+            }
+        }
+
+        function updateCharts(dataArray, shape) {
+            const windows = shape[0];
+            const valuesPerWindow = shape[1];
+
+            let currentIndex = 0;
+
+            for (let i = 0; i < windows && i < charts.length; i++) {
+                const windowData = dataArray.slice(currentIndex, currentIndex + valuesPerWindow);
+                
+                if (charts[i]) {
+                    charts[i].data.datasets[0].data = windowData;
+                    charts[i].update('none');  // Update without animation for smoothness
+                }
+                
+                currentIndex += valuesPerWindow;
+            }
+        }
+
+        function showUpdateIndicator() {
+            let indicator = document.getElementById('updateIndicator');
+            
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'updateIndicator';
+                indicator.className = 'update-indicator';
+                indicator.textContent = '✓ Updated';
+                document.body.appendChild(indicator);
+            } else {
+                // Reset animation
+                indicator.style.animation = 'none';
+                setTimeout(() => {
+                    indicator.style.animation = 'pulse 1s ease-in-out';
+                }, 10);
+            }
+
+            // Auto-remove after 2 seconds
+            setTimeout(() => {
+                if (indicator && indicator.parentNode) {
+                    indicator.remove();
+                }
+            }, 2000);
+        }
+
+        console.log('Page loaded, waiting for WebSocket connection...');
+    </script>
+</body>
+</html>

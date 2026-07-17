@@ -1,16 +1,9 @@
 use zeromq::{Socket, SocketRecv};
-use std::error::Error;
-use std::sync::{Arc, Mutex};
-use actix_web::web;
 use serde::{Serialize, Deserialize};
 use tokio::{sync::broadcast};
 use actix::{Actor, ActorContext, AsyncContext, Message};
 use actix_web_actors::ws;
 
-# [derive(Clone)]
-pub struct UserDataProtected {
-    pub data_struct: Arc<Mutex<UserData>>,
-}
 
 # [derive(Serialize,Deserialize, Debug, Clone)]
 pub struct UserData {
@@ -25,7 +18,7 @@ pub struct UserData {
 # [derive(Message, Clone)]
 # [rtype(result = "()")]
 pub struct DataUpdate {
-    pub data: UserData
+    pub zmq_struct: UserData
 }
 
 
@@ -44,13 +37,12 @@ impl Actor for WebSocket {
         // Subscribe to the broacast transmition
         let mut rx: broadcast::Receiver<UserData> = self.tx.subscribe();
         let addr: actix::prelude::Addr<WebSocket> = ctx.address();
-        
+
         actix::spawn(async move {
             while let Ok(data) = rx.recv().await {
-                // let json = serde_json::to_string(&data.data).unwrap();
                 addr.do_send(
                     DataUpdate{
-                        data: data
+                        zmq_struct: data
                     }
                 );
             }
@@ -60,10 +52,18 @@ impl Actor for WebSocket {
 
 impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
     fn handle(&mut self, item: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        log::info!("Calling the handler function for the StreamHandler::WebSocket");
         match item {
-            Ok(ws::Message::Close(_)) => ctx.stop(),
+            Ok(ws::Message::Close(_)) =>{
+                log::info!("WebSocket connection closed by the client.");
+                 ctx.stop()
+            },
+            Err(e) => {
+                log::error!("WebSocket error: {:?}", e);
+                ctx.stop();
+            }
             _ => {}
-        }
+        }            
     }
 }
 
@@ -72,7 +72,7 @@ impl actix::Handler<DataUpdate> for WebSocket {
     type Result = ();
 
     fn handle(&mut self, msg: DataUpdate, ctx: &mut Self::Context) -> Self::Result {
-        match serde_json::to_string(&msg.data) {
+        match serde_json::to_string(&msg.zmq_struct) {
             Ok(json) => {
                 log::debug!("Handling json");
                 ctx.text(json);
@@ -102,7 +102,6 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
             return;
         }
     }
-    log::info!("Connection stabilished with {url}");
         
     loop {
         match socket.recv().await {
@@ -112,7 +111,7 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
                         let repl: String = repl;
                         match serde_json::from_str::<UserData>(&repl) {
                             Ok(data) => {
-                                log::info!("Decoded frame: {}", data.id);
+                                log::debug!("Decoded frame: {}", data.id);
                                 let _ = tx.send(data);
                             }
                             Err(e) => log::error!("Could not Deserialize reply: {e}"),
@@ -130,20 +129,4 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
         }
     }
         // });
-}
-
-
-pub async fn get_zmq_data(data: &web::Data<UserDataProtected>) -> Result<(), Box<dyn Error>>{
-    let mut socket: zeromq::SubSocket = zeromq::SubSocket::new();
-    socket.connect(&"tcp://127.0.0.1:8081".to_string()).await?;
-    socket.subscribe("").await?;
-    println!("connected to 127.0.0.1:8081");
-    let repl: String = socket.recv().await?.try_into()?;
-    let json: UserData = serde_json::from_str(&repl)?;
-    let mut _data= data.data_struct.lock().unwrap(); // <- get counter's MutexGuard
-    _data.id = json.id;
-    _data.name = json.name;
-    _data.data = json.data;
-    _data.shape = json.shape;
-    Ok(())
 }
