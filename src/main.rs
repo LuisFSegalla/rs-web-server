@@ -1,6 +1,10 @@
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, web};
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, get, web};
+use actix_web_actors::ws;
 use tera::{Context, Tera};
-use std::sync::{Arc, Mutex};
+// use std::sync::{Arc, Mutex};
+use tokio::sync::{broadcast};
+
+use crate::server::UserData;
 
 mod server;
 
@@ -38,6 +42,7 @@ async fn zmq_multi_data(tera: web::Data<Tera>, data: web::Data<server::UserDataP
 #[get("/plot")]
 async fn plot(tera: web::Data<Tera>, data: web::Data<server::UserDataProtected>) -> impl Responder {
     let  read_data: std::sync::MutexGuard<'_, server::UserData> = data.data_struct.lock().unwrap();
+    println!("read_data = {:?}",read_data);
     let mut ctx: Context = Context::new();
     ctx.insert("points", &*read_data.data);
     ctx.insert("name", &*read_data.name);
@@ -59,28 +64,48 @@ async fn set_val(path: web::Path<String>, data: web::Data<server::UserDataProtec
     ""
 }
 
+async fn ws(
+    req: HttpRequest,
+    stream: web::Payload,
+    tx: web::Data<broadcast::Sender<server::UserData>>,
+) -> Result<HttpResponse, actix_web::Error> {
+    ws::start(
+        server::WebSocket {
+            tx: tx.as_ref().clone(),
+        },
+        &req,
+        stream,
+    )
+}
+
+# [get("/live")]
+async fn live(tera: web::Data<Tera>) -> HttpResponse {
+    let ctx = tera::Context::new();
+    
+    // Just serve the HTML skeleton
+    // JavaScript connects to WebSocket
+    // Data is loaded AFTER page loads
+    
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(tera.render("live_data.html", &ctx).unwrap())
+}
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init();
-    let data: server::UserDataProtected = server::UserDataProtected{
-        data_struct: Arc::new(Mutex::new(
-            server::UserData{
-                name: "NoName".to_string(),
-                id: 0,
-                data: [0.0, 1.0, 2.0, 3.0].to_vec(),
-                shape: (2,2),
-            }
-        ))
-    };
+ 
+    let (tx, _rx) = broadcast::channel::<server::UserData>(100);
+    let tx: web::Data<broadcast::Sender<UserData>> = web::Data::new(tx.clone());
 
-    let web_data: web::Data<server::UserDataProtected> = web::Data::new(data);
+    let thread_data: broadcast::Sender<UserData>= tx.as_ref().clone();
 
-
-    let thread_data: web::Data<server::UserDataProtected> = web_data.clone();
-
-    let _ = tokio::spawn(async move {
-        server::server("127.0.0.1:8081".to_string(), &thread_data).await;
+    let _ = tokio::spawn(async move 
+    {
+        server::server(
+            "tcp://127.0.0.1:8081".to_string(),
+            thread_data).await;
     });
 
     let mut tera = Tera::new();
@@ -88,17 +113,20 @@ async fn main() -> std::io::Result<()> {
     tera.add_template_file("src/templates/array.html", Some("array.html")).unwrap();
     tera.add_template_file("src/templates/multi_window.html", Some("multi_window.html")).unwrap();
     tera.add_template_file("src/templates/demo.html", Some("demo.html")).unwrap();
+    tera.add_template_file("src/templates/live_data.html", Some("live_data.html")).unwrap();
 
     HttpServer::new(move || {
         App::new()
-        .app_data(web_data.clone())
+        .app_data(tx.clone())
         .app_data(web::Data::new(tera.clone()))
-        .service(index)
-        .service(zmq_data)
-        .service(zmq_multi_data)
-        .service(demo)
-        .service(plot)
+        // .service(index)
+        // .service(zmq_data)
+        // .service(zmq_multi_data)
+        // .service(demo)
+        // .service(plot)
+        .service(live)
         .route("/{name}", web::get().to(set_val))
+        .route("/ws", web::get().to(ws))
     })
     .bind("127.0.0.1:8080")?
     .run()
