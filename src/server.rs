@@ -3,17 +3,24 @@ use serde::{Serialize, Deserialize};
 use tokio::{sync::broadcast};
 use actix::{Actor, ActorContext, AsyncContext, Message};
 use actix_web_actors::ws;
+use bytemuck::cast_slice;
 
 
 # [derive(Serialize,Deserialize, Debug, Clone)]
 pub struct UserData {
-    pub name: String,
-    pub id: i32,
+    pub acquisition_id: String,
+    pub frame_num: i32,
     pub shape: (i32,i32),
-    pub data: Vec<f64>
+    pub data: Vec<i32>
 
 }
 
+# [derive(Serialize,Deserialize)]
+struct Header {
+    pub acquisition_id: String,
+    pub frame_num: i32,
+    pub shape: (i32,i32),
+}
 
 # [derive(Message, Clone)]
 # [rtype(result = "()")]
@@ -106,12 +113,19 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
     loop {
         match socket.recv().await {
             Ok(msg) => {
-                match msg.try_into() {
+                let vec_message = msg.into_vec();
+                match str::from_utf8(&vec_message[0]) {
                     Ok(repl) => {
-                        let repl: String = repl;
-                        match serde_json::from_str::<UserData>(&repl) {
-                            Ok(data) => {
-                                log::debug!("Decoded frame: {}", data.id);
+                        match serde_json::from_str::<Header>(&repl) {
+                            Ok(header) => {
+                                let mca_data: &[i32] = cast_slice(&vec_message[1]);
+                                let data: UserData = UserData {
+                                    acquisition_id:header.acquisition_id,
+                                    frame_num: header.frame_num,
+                                    shape: header.shape, 
+                                    data: mca_data.to_vec()
+                                };
+                                log::debug!("Decoded frame: {}", data.frame_num);
                                 let _ = tx.send(data);
                             }
                             Err(e) => log::error!("Could not Deserialize reply: {e}"),

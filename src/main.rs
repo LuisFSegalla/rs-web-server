@@ -16,7 +16,7 @@ async fn index(tera: web::Data<Tera>, data: web::Data<broadcast::Sender<UserData
     match data.subscribe().recv().await {
         Ok(data) => {
             ctx.insert("points", &*data.data);
-            ctx.insert("name", &*data.name);
+            ctx.insert("name", &*data.acquisition_id);
             ctx.insert("windows", &data.shape.0);
             ctx.insert("values_per_window", &data.shape.1);
             HttpResponse::Ok().body(tera.render("multi_window.html", &ctx).unwrap())
@@ -65,7 +65,7 @@ async fn main() -> std::io::Result<()> {
     let _ = tokio::spawn(async move 
     {
         server::server(
-            "tcp://127.0.0.1:8081".to_string(),
+            "tcp://0.0.0.0:15510".to_string(),
             thread_data).await;
     });
 

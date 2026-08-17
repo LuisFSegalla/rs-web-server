@@ -223,8 +223,8 @@
                 console.log('Received data:', data);
                 
                 // Update info bar
-                document.getElementById('dataId').textContent = data.id;
-                document.getElementById('dataName').textContent = data.name;
+                document.getElementById('dataId').textContent = data.frame_num;
+                document.getElementById('dataName').textContent = data.acquisition_id;
                 document.getElementById('dataCount').textContent = data.data.length;
                 document.getElementById('dataShape').textContent = `${data.shape[0]} × ${data.shape[1]}`;
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();

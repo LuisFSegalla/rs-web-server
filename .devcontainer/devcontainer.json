@@ -29,7 +29,7 @@
         "SSH_AUTH_SOCK": "/ssh-agent"
     },
 
-    "workspaceFolder": "/workspaces/web-app",
+    "workspaceFolder": "/workspaces/rs-web-server",
 
     
     "runArgs": [
