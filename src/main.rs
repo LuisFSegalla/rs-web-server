@@ -65,7 +65,7 @@ async fn main() -> std::io::Result<()> {
     let _ = tokio::spawn(async move 
     {
         server::server(
-            "tcp://0.0.0.0:15510".to_string(),
+            "tcp://xspress-01-live-view-merger:15510".to_string(),
             thread_data).await;
     });
 
@@ -81,7 +81,7 @@ async fn main() -> std::io::Result<()> {
         .service(index)
         .service(live)
     })
-    .bind("127.0.0.1:8080")?
+    .bind("0.0.0.0:1307")?
     .run()
     .await
 }
