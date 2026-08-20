@@ -29,10 +29,11 @@ RUN mkdir src && \
     rm -rf src
 
 # Copy real source
-COPY . .
+COPY . /app
 
 # Build application
-RUN rm -rf target/release/main && cargo build --release
+RUN rm -rf /app/target/release/main
+RUN cargo build --release
 
 # -----------------------------------------------------------------------------
 # Runtime stage
