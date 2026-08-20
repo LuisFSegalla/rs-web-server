@@ -19,20 +19,8 @@ FROM rust:1-${VARIANT} AS builder
 WORKDIR /app
 
 # Copy manifests first to leverage Docker cache
-COPY Cargo.toml Cargo.lock ./
+COPY . .
 
-# Create a dummy source file so dependencies can be cached
-# Compile the dependencies first and later only the application
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src
-
-# Copy real source
-COPY . /app
-
-# Build application
-RUN rm -rf /app/target/release/main
 RUN cargo build --release
 
 # -----------------------------------------------------------------------------
