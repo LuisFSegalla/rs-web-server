@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/app /usr/local/bin/app
+COPY --from=builder /app/target/release/main /usr/local/bin/main
+COPY --from=builder /app/src/templates/ /app/src/templates/
 
-ENTRYPOINT ["app"]
+ENTRYPOINT ["main"]
