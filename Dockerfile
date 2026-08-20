@@ -32,8 +32,7 @@ RUN mkdir src && \
 COPY . .
 
 # Build application
-RUN cargo build --release
-
+RUN rm -rf target/release/main && cargo build --release
 
 # -----------------------------------------------------------------------------
 # Runtime stage
