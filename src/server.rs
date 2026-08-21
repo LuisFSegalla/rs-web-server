@@ -10,7 +10,7 @@ use bytemuck::cast_slice;
 pub struct UserData {
     pub acquisition_id: String,
     pub frame_num: i32,
-    pub shape: (i32,i32),
+    pub shape: (String,String),
     pub data: Vec<i32>
 
 }
@@ -19,7 +19,7 @@ pub struct UserData {
 struct Header {
     pub acquisition_id: String,
     pub frame_num: i32,
-    pub shape: (i32,i32),
+    pub shape: (String,String),
 }
 
 # [derive(Message, Clone)]
