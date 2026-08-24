@@ -10,7 +10,7 @@ use bytemuck::cast_slice;
 pub struct UserData {
     pub acquisition_id: String,
     pub frame_num: i32,
-    pub shape: (String,String),
+    pub shape: (i32,i32),
     pub data: Vec<i32>
 
 }
@@ -19,7 +19,7 @@ pub struct UserData {
 struct Header {
     pub acquisition_id: String,
     pub frame_num: i32,
-    pub shape: (String,String),
+    pub shape: (i32,i32),
 }
 
 # [derive(Message, Clone)]
@@ -93,17 +93,17 @@ impl actix::Handler<DataUpdate> for WebSocket {
 
 
 pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
-    println!("Trying to connecto to {url}");
+    log::debug!("Trying to connecto to {url}");
     let mut socket: zeromq::SubSocket = zeromq::SubSocket::new();
     match socket.connect(&url).await {
-        Ok(_) => println!("Connected to {url}"),
+        Ok(_) => log::debug!("Connected to {url}"),
         Err(e) => {
             log::error!("Failed to connect to {url}: {e}");
             return;
         }
     }
     match  socket.subscribe("").await {
-        Ok(_) => println!("Subscribed to all messages"),
+        Ok(_) => log::debug!("Subscribed to all messages"),
         Err(e) => {
             log::error!("Failed to subscribe: {e}");
             return;
