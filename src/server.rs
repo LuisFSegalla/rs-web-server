@@ -93,17 +93,17 @@ impl actix::Handler<DataUpdate> for WebSocket {
 
 
 pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
-    log::info!("Trying to connecto to {url}");
+    log::debug!("Trying to connecto to {url}");
     let mut socket: zeromq::SubSocket = zeromq::SubSocket::new();
     match socket.connect(&url).await {
-        Ok(_) => log::info!("Connected to {url}"),
+        Ok(_) => log::debug!("Connected to {url}"),
         Err(e) => {
             log::error!("Failed to connect to {url}: {e}");
             return;
         }
     }
     match  socket.subscribe("").await {
-        Ok(_) => log::info!("Subscribed to all messages"),
+        Ok(_) => log::debug!("Subscribed to all messages"),
         Err(e) => {
             log::error!("Failed to subscribe: {e}");
             return;
