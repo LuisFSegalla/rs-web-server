@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/main /usr/local/bin/main
+COPY --from=builder /app/target/release/live_view_merger /usr/local/bin/live_view_merger
 COPY --from=builder /app/src/templates/ /app/src/templates/
 
 ENTRYPOINT ["main"]
