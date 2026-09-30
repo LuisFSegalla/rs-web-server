@@ -78,7 +78,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let _ = tokio::spawn(async move 
     {
-        server::server(
+        let _ = server::server(
             live_view_addr,
             thread_data
             ).await;

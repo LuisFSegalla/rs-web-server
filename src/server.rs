@@ -1,5 +1,5 @@
 use zeromq::{Socket, SocketRecv};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize, ser::Error};
 use tokio::{sync::broadcast};
 use actix::{Actor, ActorContext, AsyncContext, Message};
 use actix_web_actors::ws;
@@ -15,8 +15,8 @@ pub struct UserData {
 
 }
 
-# [derive(Serialize,Deserialize)]
-struct Header {
+# [derive(Serialize,Deserialize, Debug)]
+pub struct Header {
     pub acquisition_id: String,
     pub frame_num: i32,
     pub shape: (i32,i32),
@@ -92,21 +92,19 @@ impl actix::Handler<DataUpdate> for WebSocket {
 }
 
 
-pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
+pub async fn server(url: String, tx: broadcast::Sender<UserData>) -> Result<(), Box<dyn std::error::Error>> {
     log::debug!("Trying to connecto to {url}");
     let mut socket: zeromq::SubSocket = zeromq::SubSocket::new();
     match socket.connect(&url).await {
         Ok(_) => log::debug!("Connected to {url}"),
         Err(e) => {
             log::error!("Failed to connect to {url}: {e}");
-            return;
         }
     }
     match  socket.subscribe("").await {
         Ok(_) => log::debug!("Subscribed to all messages"),
         Err(e) => {
             log::error!("Failed to subscribe: {e}");
-            return;
         }
     }
         
@@ -118,7 +116,7 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
                     Ok(repl) => {
                         match serde_json::from_str::<Header>(&repl) {
                             Ok(header) => {
-                                let mca_data: &[i32] = cast_slice(&vec_message[1]);
+                                let mca_data: Vec<i32> = serde_json::from_slice(&vec_message[1])?;
                                 let data: UserData = UserData {
                                     acquisition_id:header.acquisition_id,
                                     frame_num: header.frame_num,
@@ -138,7 +136,6 @@ pub async fn server(url: String, tx: broadcast::Sender<UserData>) {
             }
             Err(e) => {
                 eprintln!("Error receiving subscription: {:?}", e);
-                break;
             }
         }
     }
